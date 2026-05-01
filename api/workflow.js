@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     }
 
     const parsedSteps = Array.isArray(parsed?.steps) ? parsed.steps : [];
-    const summary = typeof parsed?.summary === 'string' ? parsed.summary.trim() : '';
+    const summary = typeof parsed?.summary === 'string' ? parsed.summary : '';
 
     for (let index = 0; index < steps.length; index += 1) {
       const stepName = steps[index];

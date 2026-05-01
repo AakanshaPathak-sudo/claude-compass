@@ -1077,7 +1077,7 @@ function App() {
         [toggleId]: false,
       }));
 
-      const finalSummary = enforceMarkdownBullets(finalSummaryText || '').trim();
+      const finalSummary = typeof finalSummaryText === 'string' ? finalSummaryText : '';
 
       const workflowEntry = {
         id: workflowId,
