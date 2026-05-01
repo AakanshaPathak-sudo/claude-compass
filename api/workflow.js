@@ -5,6 +5,8 @@ const applyCors = (res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 };
+const REPORT_INSTRUCTION =
+  "Write the actual report. Do not describe what the report contains. Do not write an introduction about what you are going to do. Start directly with the report content. Use ## headers for each section. Include specific data, numbers, and findings in each section. The report must be at least 600 words of actual content. If you don't have real data, make reasonable estimates clearly marked as approximate.";
 
 export default async function handler(req, res) {
   applyCors(res);
@@ -35,11 +37,12 @@ export default async function handler(req, res) {
       `You are executing a multi-step workflow. The user's request is: ${prompt}. ` +
       `Execute these steps:\n${stepsList}\n` +
       'For each step provide a 2-3 sentence output. Then provide a comprehensive final summary. ' +
+      `${REPORT_INSTRUCTION} ` +
       'Format your response as JSON with keys: steps (array of {name, output}) and summary (string).';
 
     const stream = await groq.chat.completions.create({
       model: MODEL,
-      max_tokens: 1400,
+      max_tokens: 2000,
       temperature: 0.2,
       stream: true,
       messages: [

@@ -23,6 +23,13 @@ const TRADEOFF_METRICS = {
 const WORKFLOWS_STORAGE_KEY = 'compass_workflows';
 const PINNED_STORAGE_KEY = 'compass_pinned';
 const MESSAGE_FEEDBACK_KEY = 'compass_message_feedback';
+const buildImprovedWorkflowPrompt = (basePrompt, selectedItems) => {
+  const cleanedBase = (basePrompt || '').replace(/\s+/g, ' ').trim();
+  const details = Array.isArray(selectedItems) ? selectedItems.filter(Boolean) : [];
+  if (details.length === 0) return cleanedBase;
+
+  return `Create a structured workflow report for this request: "${cleanedBase}". Scope it with these specifics: ${details.join(', ')}. Provide concrete sections, data points, and actionable findings.`;
+};
 
 const enforceMarkdownBullets = (content) => {
   if (!content || typeof content !== 'string') {
@@ -983,17 +990,13 @@ function App() {
       const selectedItems = prev.selectedItems.includes(item)
         ? prev.selectedItems.filter((entry) => entry !== item)
         : [...prev.selectedItems, item];
-      let editedPrompt = prev.editedPrompt;
-      if (!prev.selectedItems.includes(item) && !editedPrompt.toLowerCase().includes(item.toLowerCase())) {
-        editedPrompt = `${editedPrompt.trim()} | Include ${item}`.trim();
-      }
-      return { ...prev, selectedItems, editedPrompt };
+      return { ...prev, selectedItems };
     });
   };
 
   const onUseImprovedPrompt = () => {
     if (!promptQuality) return;
-    const improvedPrompt = (promptQuality.editedPrompt || '').trim();
+    const improvedPrompt = buildImprovedWorkflowPrompt(promptQuality.editedPrompt, promptQuality.selectedItems);
     if (!improvedPrompt) return;
 
     setLastPrompt(improvedPrompt);

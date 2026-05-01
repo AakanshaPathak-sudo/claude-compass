@@ -25,6 +25,7 @@ const MODEL = 'llama-3.3-70b-versatile';
 
 const CLASSIFIER_SYSTEM_PROMPT = `You are an intent classifier. Analyse the user's prompt and return JSON only with these fields: recommendation (one of: workflow, simple_prompt, agent, skill), reason (one sentence explaining why), steps (array of 3-6 step names if workflow, else empty), tokens_min (integer), tokens_max (integer), time_estimate (string like '3-6 min' or '~15 sec'), quality (string), repeatable (boolean). Return only valid JSON, no other text.`;
 const QUALITY_SYSTEM_PROMPT = `You are a prompt quality checker. Evaluate if this prompt is specific enough to produce a high quality structured output. Return JSON only: {isVague: boolean, missingInfo: string[]} where missingInfo is a list of 2-3 specific things that would make the prompt better. Example missing info: 'time period', 'specific states to focus on', 'type of data needed', 'format of output'.`;
+const REPORT_INSTRUCTION = `Write the actual report. Do not describe what the report contains. Do not write an introduction about what you are going to do. Start directly with the report content. Use ## headers for each section. Include specific data, numbers, and findings in each section. The report must be at least 600 words of actual content. If you don't have real data, make reasonable estimates clearly marked as approximate.`;
 
 const writeSSE = (res, payload) => {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -172,11 +173,12 @@ const workflowHandler = async (req, res) => {
       `You are executing a multi-step workflow. The user's request is: ${prompt}. ` +
       `Execute these steps:\n${stepsList}\n` +
       'For each step provide a 2-3 sentence output. Then provide a comprehensive final summary. ' +
+      `${REPORT_INSTRUCTION} ` +
       'Format your response as JSON with keys: steps (array of {name, output}) and summary (string).';
 
     const stream = await groq.chat.completions.create({
       model: MODEL,
-      max_tokens: 1400,
+      max_tokens: 2000,
       temperature: 0.2,
       stream: true,
       messages: [
