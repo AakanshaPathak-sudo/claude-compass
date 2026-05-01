@@ -798,15 +798,29 @@ function App() {
       .filter((entry) => entry.content.trim().length > 0)
       .slice(-20);
 
-  const fetchWithTimeout = async (url, options, timeoutMs = 25000) => {
+  const fetchWithTimeout = async (url, options, timeoutMs = 30000) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(url, { ...options, signal: controller.signal });
-      return response;
-    } finally {
+      return {
+        response,
+        clearTimeoutRef: () => clearTimeout(timer),
+      };
+    } catch (error) {
       clearTimeout(timer);
+      throw error;
     }
+  };
+
+  const getLatestUserMessageId = (messageList = messages) =>
+    messageList.findLast((message) => message.role === 'user')?.id || null;
+
+  const showInlineRequestError = (prompt) => {
+    setInlineError({
+      prompt,
+      userMessageId: getLatestUserMessageId(),
+    });
   };
 
   const processPrompt = async ({
@@ -837,20 +851,25 @@ function App() {
     setWorkflowRunning(false);
     setWorkflowProgress(null);
     setSimpleState({ running: false });
+    setInlineError(null);
     setStatus('classifying');
+    let clearClassifyTimeout = () => {};
 
     try {
-      const response = await fetchWithTimeout('/api/classify', {
+      const { response, clearTimeoutRef } = await fetchWithTimeout('/api/classify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, history: normalizeHistory(nextHistory) }),
       });
+      clearClassifyTimeout = clearTimeoutRef;
 
       if (!response.ok) {
+        clearTimeoutRef();
         throw new Error('Classification failed');
       }
 
       const payload = await response.json();
+      clearTimeoutRef();
       const nextClassification = payload.classification;
       const recommendation = nextClassification?.recommendation;
 
@@ -878,6 +897,7 @@ function App() {
         },
       ]);
     } catch (error) {
+      clearClassifyTimeout();
       setStatus('idle');
       setInlineError({
         prompt,
@@ -1070,6 +1090,7 @@ function App() {
     const outputByStep = {};
     let workflowCompleted = false;
     let currentStepIndex = 0;
+    let clearWorkflowTimeout = () => {};
 
     const persistWorkflowSummary = async () => {
       const orderedSteps = activeSteps
@@ -1126,13 +1147,15 @@ function App() {
     };
 
     try {
-      const response = await fetchWithTimeout('/api/workflow', {
+      const { response, clearTimeoutRef } = await fetchWithTimeout('/api/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: activePrompt, steps: activeSteps, history: historyForRequest }),
-      }, 60000);
+      });
+      clearWorkflowTimeout = clearTimeoutRef;
 
       if (!response.ok) {
+        clearTimeoutRef();
         throw new Error('Workflow stream failed');
       }
 
@@ -1161,15 +1184,14 @@ function App() {
         setWorkflowProgress(null);
       }
 
+      clearTimeoutRef();
       await persistWorkflowSummary();
       setWorkflowRunning(false);
     } catch (error) {
+      clearWorkflowTimeout();
       setWorkflowRunning(false);
       setWorkflowProgress(null);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Workflow execution failed. Please retry.', id: crypto.randomUUID() },
-      ]);
+      showInlineRequestError(activePrompt);
     }
   };
 
@@ -1203,7 +1225,9 @@ function App() {
     };
 
     setSimpleState({ running: true });
+    setInlineError(null);
     setMessages((prev) => [...prev, { role: 'assistant', content: '', id: streamId, streaming: true }]);
+    let clearChatTimeout = () => {};
 
     let backlog = '';
 
@@ -1218,13 +1242,15 @@ function App() {
     };
 
     try {
-      const response = await fetchWithTimeout('/api/chat', {
+      const { response, clearTimeoutRef } = await fetchWithTimeout('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: promptText, history: historyForRequest, system: systemOverride }),
-      }, 60000);
+      });
+      clearChatTimeout = clearTimeoutRef;
 
       if (!response.ok) {
+        clearTimeoutRef();
         throw new Error('Simple stream failed');
       }
 
@@ -1258,6 +1284,7 @@ function App() {
         await appendToken(backlog);
         backlog = '';
       }
+      clearTimeoutRef();
 
       let completedOutput = streamedText.trim();
       if (shouldEnforceMarkdown) {
@@ -1283,14 +1310,10 @@ function App() {
       );
       return completedOutput;
     } catch (error) {
+      clearChatTimeout();
       setSimpleState({ running: false });
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === streamId
-            ? { ...message, content: 'Streaming failed. Please try again.', streaming: false }
-            : message
-        )
-      );
+      setMessages((prev) => prev.filter((message) => message.id !== streamId));
+      showInlineRequestError(promptText);
       return '';
     }
   };
