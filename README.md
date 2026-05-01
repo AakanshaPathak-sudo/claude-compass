@@ -8,10 +8,19 @@ A minimal React + Tailwind app with real Groq SDK integration that classifies us
    - `npm install`
 2. Add your Groq API key in `.env`:
    - `GROQ_API_KEY=your_key_here`
-3. Run both frontend and API server:
+3. Run both frontend and API server locally:
    - `npm run dev`
 
 The Vite app runs on `http://localhost:5173` and proxies API calls to the Express server on `http://localhost:8787`.
+
+## Vercel deployment
+
+- API routes are implemented as Vercel serverless functions in `api/`:
+  - `POST /api/classify`
+  - `POST /api/chat`
+  - `POST /api/workflow`
+- Set `GROQ_API_KEY` in Vercel Project Environment Variables.
+- The frontend only calls local relative `/api/*` endpoints; Groq is called server-side via `process.env.GROQ_API_KEY`.
 
 ## Implemented behavior
 

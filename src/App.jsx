@@ -1126,7 +1126,7 @@ function App() {
     };
 
     try {
-      const response = await fetchWithTimeout('/api/workflow/stream', {
+      const response = await fetchWithTimeout('/api/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: activePrompt, steps: activeSteps, history: historyForRequest }),
@@ -1218,7 +1218,7 @@ function App() {
     };
 
     try {
-      const response = await fetchWithTimeout('/api/simple/stream', {
+      const response = await fetchWithTimeout('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: promptText, history: historyForRequest, system: systemOverride }),

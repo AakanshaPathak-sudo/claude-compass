@@ -113,7 +113,7 @@ app.post('/api/classify', async (req, res) => {
   }
 });
 
-app.post('/api/workflow/stream', async (req, res) => {
+const workflowHandler = async (req, res) => {
   const { prompt, steps, history } = req.body;
 
   if (!prompt || !Array.isArray(steps)) {
@@ -151,9 +151,12 @@ app.post('/api/workflow/stream', async (req, res) => {
     writeSSE(res, { type: 'error', message: error.message || 'Workflow stream failed' });
     return res.end();
   }
-});
+};
 
-app.post('/api/simple/stream', async (req, res) => {
+app.post('/api/workflow', workflowHandler);
+app.post('/api/workflow/stream', workflowHandler);
+
+const chatHandler = async (req, res) => {
   const { prompt, history, system } = req.body;
 
   if (!prompt) {
@@ -183,7 +186,10 @@ app.post('/api/simple/stream', async (req, res) => {
     writeSSE(res, { type: 'error', message: error.message || 'Simple stream failed' });
     return res.end();
   }
-});
+};
+
+app.post('/api/chat', chatHandler);
+app.post('/api/simple/stream', chatHandler);
 
 app.listen(port, () => {
   // eslint-disable-next-line no-console
