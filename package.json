@@ -19,6 +19,9 @@
   "author": "",
   "license": "ISC",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "bugs": {
     "url": "https://github.com/AakanshaPathak-sudo/claude-compass/issues"
   },
@@ -28,17 +31,15 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "groq-sdk": "^1.1.2",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
-  },
-  "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
     "concurrently": "^9.2.1",
     "postcss": "^8.5.13",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.2.4",
     "vite": "^8.0.10"
   }
