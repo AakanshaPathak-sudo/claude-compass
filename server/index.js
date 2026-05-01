@@ -126,23 +126,53 @@ const workflowHandler = async (req, res) => {
 
   try {
     const conversationMessages = buildConversationMessages({ prompt, history });
+    const workflowPrompt = [
+      `Topic: ${prompt}`,
+      '',
+      'Execute these workflow steps in order and return JSON only:',
+      ...steps.map((step, index) => `${index + 1}. ${step}`),
+      '',
+      'Return strictly valid JSON in this shape:',
+      '{ "steps": [ { "name": "step name", "output": "concise result" } ] }',
+      'Keep each output concise but useful. Do not include markdown fences or extra text.',
+    ].join('\n');
 
-    for (const step of steps) {
-      writeSSE(res, { type: 'step_start', step });
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      max_tokens: 1400,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You execute a multi-step workflow in a single pass. Return only valid JSON with one concise output per provided step.',
+        },
+        ...conversationMessages,
+        { role: 'user', content: workflowPrompt },
+      ],
+    });
 
-      await streamModelText({
-        system: 'You execute one workflow step at a time. Return concise but useful output for the current step only.',
-        messages: [
-          ...conversationMessages,
-          {
-            role: 'user',
-            content: `Run this step: ${step} for the following topic: ${prompt}. Use the same structure as before.`,
-          },
-        ],
-        onChunk: (chunk) => writeSSE(res, { type: 'step_chunk', step, chunk }),
-      });
+    const raw = completion.choices?.[0]?.message?.content ?? '';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : null;
+    }
 
-      writeSSE(res, { type: 'step_end', step });
+    const parsedSteps = Array.isArray(parsed?.steps) ? parsed.steps : [];
+
+    for (let index = 0; index < steps.length; index += 1) {
+      const stepName = steps[index];
+      const resolvedStep = parsedSteps.find((item) => item?.name === stepName) || parsedSteps[index];
+      const output = typeof resolvedStep?.output === 'string' ? resolvedStep.output : '';
+
+      writeSSE(res, { type: 'step_start', step: stepName });
+      if (output.trim().length > 0) {
+        writeSSE(res, { type: 'step_chunk', step: stepName, chunk: output });
+      }
+      writeSSE(res, { type: 'step_end', step: stepName });
     }
 
     writeSSE(res, { type: 'done' });

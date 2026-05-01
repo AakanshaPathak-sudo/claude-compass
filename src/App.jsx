@@ -24,7 +24,6 @@ const FINAL_WORKFLOW_SUMMARY_SYSTEM_PROMPT =
   'You are a helpful assistant. Write a clean, concise response using proper markdown. Use proper markdown syntax: ## for headers, - for bullet points, and **text** for bold. Never use spaces or indentation to create structure. Do not output plain line-by-line text blocks. Keep paragraphs short (2-3 sentences max) and avoid excessive blank lines.';
 const WORKFLOWS_STORAGE_KEY = 'compass_workflows';
 const PINNED_STORAGE_KEY = 'compass_pinned';
-const COMPASS_PANEL_COUNT_KEY = 'compass_panel_count';
 const MESSAGE_FEEDBACK_KEY = 'compass_message_feedback';
 
 const enforceMarkdownBullets = (content) => {
@@ -332,16 +331,12 @@ function CompassPanel({
   onDismiss,
   tradeoffOpen,
   onConfirm,
-  panelSeenCount,
   educationExpanded,
-  educationVisibleOverride,
   onToggleEducationExpanded,
-  onOpenEducation,
 }) {
   const visible = status !== 'idle';
   const primaryIsWorkflow = classification?.recommendation !== 'simple_prompt';
-  const showEducationByDefault = panelSeenCount < 3;
-  const showEducationBlock = !tradeoffOpen && (showEducationByDefault || educationVisibleOverride);
+  const showEducationBlock = !tradeoffOpen;
 
   return (
     <section
@@ -374,18 +369,17 @@ function CompassPanel({
             {!tradeoffOpen && (
               <div>
                 <p className="text-sm text-[#6b6860]">{classification.reason}</p>
-                {showEducationBlock ? (
+                {showEducationBlock && (
                   <div className="mt-3 border-t border-[#e8e6df] pt-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="rounded-lg border border-[#e2e0d8] bg-[#f7f5f0] p-2.5">
                       <p className="text-xs leading-relaxed text-[#6b6860]">
-                        💡 A workflow breaks your task into sequential steps, executes each one, and synthesises a final
-                        answer. Unlike a simple prompt, each step builds on the previous one - giving you more structured,
-                        reliable output.
+                        💡 A workflow breaks your task into steps, executes each one, and builds on the previous - giving
+                        you more structured, reliable output than a single prompt.
                       </p>
                       <button
                         type="button"
                         onClick={onToggleEducationExpanded}
-                        className="shrink-0 text-xs font-medium text-[#c96442] hover:underline"
+                        className="mt-2 text-xs font-medium text-[#c96442] hover:underline"
                       >
                         {educationExpanded ? 'Got it ↑' : "What's the difference? ↓"}
                       </button>
@@ -397,16 +391,6 @@ function CompassPanel({
                         <p className="mt-1"><span className="font-semibold text-[#1a1917]">When to use workflow:</span> Task has 3+ sequential steps, you want repeatable output, or you need depth over speed.</p>
                       </div>
                     )}
-                  </div>
-                ) : (
-                  <div className="mt-3 border-t border-[#e8e6df] pt-2">
-                    <button
-                      type="button"
-                      onClick={onOpenEducation}
-                      className="text-xs font-medium text-[#6b6860] hover:text-[#1a1917]"
-                    >
-                      ℹ️
-                    </button>
                   </div>
                 )}
               </div>
@@ -541,9 +525,7 @@ function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState('');
-  const [panelSeenCount, setPanelSeenCount] = useState(0);
   const [educationExpanded, setEducationExpanded] = useState(false);
-  const [educationVisibleOverride, setEducationVisibleOverride] = useState(false);
   const [status, setStatus] = useState('idle');
   const [classification, setClassification] = useState(null);
   const [tradeoffOpen, setTradeoffOpen] = useState(false);
@@ -572,11 +554,9 @@ function App() {
     try {
       const workflowsRaw = localStorage.getItem(WORKFLOWS_STORAGE_KEY);
       const pinnedRaw = localStorage.getItem(PINNED_STORAGE_KEY);
-      const panelCountRaw = localStorage.getItem(COMPASS_PANEL_COUNT_KEY);
       const feedbackRaw = localStorage.getItem(MESSAGE_FEEDBACK_KEY);
       const parsedWorkflows = workflowsRaw ? JSON.parse(workflowsRaw) : [];
       const parsedPinned = pinnedRaw ? JSON.parse(pinnedRaw) : [];
-      const parsedPanelCount = Number(panelCountRaw || 0);
       const parsedFeedback = feedbackRaw ? JSON.parse(feedbackRaw) : {};
       if (Array.isArray(parsedWorkflows)) {
         setWorkflows(parsedWorkflows);
@@ -584,16 +564,12 @@ function App() {
       if (Array.isArray(parsedPinned)) {
         setPinnedWorkflowIds(parsedPinned);
       }
-      if (Number.isFinite(parsedPanelCount)) {
-        setPanelSeenCount(parsedPanelCount);
-      }
       if (parsedFeedback && typeof parsedFeedback === 'object') {
         setFeedbackByMessageId(parsedFeedback);
       }
     } catch {
       setWorkflows([]);
       setPinnedWorkflowIds([]);
-      setPanelSeenCount(0);
       setFeedbackByMessageId({});
     }
   }, []);
@@ -607,15 +583,6 @@ function App() {
     const timer = setTimeout(() => setCopiedMessageId(null), 1200);
     return () => clearTimeout(timer);
   }, [copiedMessageId]);
-
-  useEffect(() => {
-    if (status !== 'classified' || !classification) return;
-    setPanelSeenCount((prev) => {
-      const next = prev + 1;
-      localStorage.setItem(COMPASS_PANEL_COUNT_KEY, String(next));
-      return next;
-    });
-  }, [status, classification]);
 
   const saveWorkflows = (next) => {
     setWorkflows(next);
@@ -847,7 +814,6 @@ function App() {
     setTradeoffOpen(false);
     setClassification(null);
     setEducationExpanded(false);
-    setEducationVisibleOverride(false);
     setWorkflowRunning(false);
     setWorkflowProgress(null);
     setSimpleState({ running: false });
@@ -1839,14 +1805,8 @@ function App() {
           status={status}
           classification={classification}
           tradeoffOpen={tradeoffOpen}
-          panelSeenCount={panelSeenCount}
           educationExpanded={educationExpanded}
-          educationVisibleOverride={educationVisibleOverride}
           onToggleEducationExpanded={() => setEducationExpanded((prev) => !prev)}
-          onOpenEducation={() => {
-            setEducationVisibleOverride(true);
-            setEducationExpanded(true);
-          }}
           onChooseAction={() => {
             setTradeoffOpen(true);
           }}
