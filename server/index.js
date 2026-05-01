@@ -133,10 +133,11 @@ const workflowHandler = async (req, res) => {
       'For each step provide a 2-3 sentence output. Then provide a comprehensive final summary. ' +
       'Format your response as JSON with keys: steps (array of {name, output}) and summary (string).';
 
-    const completion = await groq.chat.completions.create({
+    const stream = await groq.chat.completions.create({
       model: MODEL,
       max_tokens: 1400,
       temperature: 0.2,
+      stream: true,
       messages: [
         {
           role: 'system',
@@ -148,7 +149,11 @@ const workflowHandler = async (req, res) => {
       ],
     });
 
-    const raw = completion.choices?.[0]?.message?.content ?? '';
+    let raw = '';
+    for await (const chunk of stream) {
+      raw += chunk.choices?.[0]?.delta?.content ?? '';
+    }
+
     let parsed;
     try {
       parsed = JSON.parse(raw);

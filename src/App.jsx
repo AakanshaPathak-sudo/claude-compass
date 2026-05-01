@@ -338,10 +338,10 @@ function CompassPanel({
 
   return (
     <section
-      className={`w-full overflow-y-auto overscroll-contain rounded-2xl border border-[#c96442] bg-[#ffffff] shadow-xl transition-all duration-500 ${
+      className={`w-full rounded-2xl border border-[#c96442] bg-[#ffffff] shadow-xl transition-all duration-500 ${
         visible
-          ? `mt-3 translate-y-0 opacity-100 ${tradeoffOpen ? 'max-h-[70vh]' : 'max-h-[360px]'}`
-          : 'pointer-events-none -mt-1 translate-y-3 opacity-0 max-h-0'
+          ? 'mt-3 translate-y-0 opacity-100'
+          : 'pointer-events-none -mt-1 hidden translate-y-3 opacity-0'
       }`}
     >
       <div className="border-b border-[#c96442]/20 bg-[#fdf0eb] px-5 py-3">
