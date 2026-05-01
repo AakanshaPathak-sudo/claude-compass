@@ -331,10 +331,16 @@ function CompassPanel({
   onConfirm,
   educationExpanded,
   onToggleEducationExpanded,
+  promptQuality,
+  onToggleQualityItem,
+  onQualityPromptChange,
+  onUseImprovedPrompt,
+  onUseOriginalPrompt,
 }) {
   const visible = status !== 'idle';
   const primaryIsWorkflow = classification?.recommendation !== 'simple_prompt';
   const showEducationBlock = !tradeoffOpen;
+  const showQualityPanel = !tradeoffOpen && promptQuality?.isVague;
 
   return (
     <section
@@ -364,7 +370,52 @@ function CompassPanel({
 
         {classification && (
           <div className="space-y-4">
-            {!tradeoffOpen && (
+            {showQualityPanel && (
+              <div className="space-y-3 rounded-xl border border-[#e2e0d8] bg-[#f7f5f0] p-3">
+                <p className="text-sm font-semibold text-[#1a1917]">Let&apos;s make this better</p>
+                <p className="text-sm text-[#6b6860]">
+                  This looks like a workflow - but your prompt could be more specific for better results.
+                </p>
+                {Array.isArray(promptQuality?.missingInfo) && promptQuality.missingInfo.length > 0 && (
+                  <div className="space-y-2">
+                    {promptQuality.missingInfo.map((item) => (
+                      <label key={item} className="flex cursor-pointer items-center gap-2 text-xs text-[#6b6860]">
+                        <input
+                          type="checkbox"
+                          checked={promptQuality.selectedItems.includes(item)}
+                          onChange={() => onToggleQualityItem(item)}
+                          className="h-3.5 w-3.5 accent-[#c96442]"
+                        />
+                        <span>{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                <textarea
+                  value={promptQuality.editedPrompt}
+                  onChange={(event) => onQualityPromptChange(event.target.value)}
+                  className="min-h-20 w-full rounded-lg border border-[#d7d4cb] bg-white p-2 text-sm text-[#1a1917] outline-none focus:border-[#c96442]"
+                />
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={onUseImprovedPrompt}
+                    className="w-full rounded-lg bg-[#c96442] px-4 py-2 text-sm font-medium text-white hover:bg-[#b85736] sm:w-auto"
+                  >
+                    Use improved prompt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onUseOriginalPrompt}
+                    className="w-full rounded-lg border border-[#c96442]/35 bg-white px-4 py-2 text-sm font-medium text-[#c96442] hover:bg-[#fdf0eb] sm:w-auto"
+                  >
+                    Use as is
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!tradeoffOpen && !showQualityPanel && (
               <div>
                 <p className="text-sm text-[#6b6860]">{classification.reason}</p>
                 {showEducationBlock && (
@@ -394,7 +445,7 @@ function CompassPanel({
               </div>
             )}
 
-            {!tradeoffOpen && (
+            {!tradeoffOpen && !showQualityPanel && (
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <button
                   type="button"
@@ -526,6 +577,7 @@ function App() {
   const [educationExpanded, setEducationExpanded] = useState(false);
   const [status, setStatus] = useState('idle');
   const [classification, setClassification] = useState(null);
+  const [promptQuality, setPromptQuality] = useState(null);
   const [tradeoffOpen, setTradeoffOpen] = useState(false);
   const [lastPrompt, setLastPrompt] = useState('');
   const [workflowRunning, setWorkflowRunning] = useState(false);
@@ -597,6 +649,7 @@ function App() {
     setConversationHistory([]);
     setStatus('idle');
     setClassification(null);
+    setPromptQuality(null);
     setTradeoffOpen(false);
     setLastPrompt('');
     setWorkflowRunning(false);
@@ -672,6 +725,7 @@ function App() {
     ]);
     setStatus('idle');
     setClassification(null);
+    setPromptQuality(null);
     setTradeoffOpen(false);
     setWorkflowRunning(false);
     setWorkflowProgress(null);
@@ -737,6 +791,7 @@ function App() {
     setLastPrompt(newPrompt);
     setStatus('idle');
     setClassification(null);
+    setPromptQuality(null);
     setTradeoffOpen(false);
     setWorkflowRunning(false);
     setWorkflowProgress(null);
@@ -811,6 +866,7 @@ function App() {
     setLastPrompt(prompt);
     setTradeoffOpen(false);
     setClassification(null);
+    setPromptQuality(null);
     setEducationExpanded(false);
     setWorkflowRunning(false);
     setWorkflowProgress(null);
@@ -846,6 +902,32 @@ function App() {
       }
 
       if (recommendation === 'workflow' || recommendation === 'agent' || recommendation === 'skill') {
+        if (recommendation === 'workflow') {
+          try {
+            const { response: qualityResponse, clearTimeoutRef: clearQualityTimeout } = await fetchWithTimeout('/api/prompt-quality', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt }),
+            }, 15000);
+
+            if (qualityResponse.ok) {
+              const qualityPayload = await qualityResponse.json();
+              const quality = qualityPayload?.quality;
+              if (quality?.isVague) {
+                setPromptQuality({
+                  isVague: true,
+                  originalPrompt: prompt,
+                  editedPrompt: prompt,
+                  missingInfo: Array.isArray(quality?.missingInfo) ? quality.missingInfo : [],
+                  selectedItems: [],
+                });
+              }
+            }
+            clearQualityTimeout();
+          } catch {
+            // Fall back to default flow when quality checker fails.
+          }
+        }
         setClassification(nextClassification);
         setStatus('classified');
         return;
@@ -885,6 +967,7 @@ function App() {
     setStatus('idle');
     setTradeoffOpen(false);
     setClassification(null);
+    setPromptQuality(null);
 
     if (mode === 'workflow') {
       await runWorkflow(snapshotClassification, snapshotPrompt, sourceHistory);
@@ -892,6 +975,53 @@ function App() {
     }
 
     await runSimplePrompt(snapshotPrompt, sourceHistory);
+  };
+
+  const onToggleQualityItem = (item) => {
+    setPromptQuality((prev) => {
+      if (!prev) return prev;
+      const selectedItems = prev.selectedItems.includes(item)
+        ? prev.selectedItems.filter((entry) => entry !== item)
+        : [...prev.selectedItems, item];
+      let editedPrompt = prev.editedPrompt;
+      if (!prev.selectedItems.includes(item) && !editedPrompt.toLowerCase().includes(item.toLowerCase())) {
+        editedPrompt = `${editedPrompt.trim()} | Include ${item}`.trim();
+      }
+      return { ...prev, selectedItems, editedPrompt };
+    });
+  };
+
+  const onUseImprovedPrompt = () => {
+    if (!promptQuality) return;
+    const improvedPrompt = (promptQuality.editedPrompt || '').trim();
+    if (!improvedPrompt) return;
+
+    setLastPrompt(improvedPrompt);
+    setPromptQuality(null);
+    setMessages((prev) => {
+      const next = [...prev];
+      const lastUserIndex = [...next].reverse().findIndex((message) => message.role === 'user');
+      if (lastUserIndex >= 0) {
+        const index = next.length - 1 - lastUserIndex;
+        next[index] = { ...next[index], content: improvedPrompt };
+      }
+      return next;
+    });
+    setConversationHistory((prev) => {
+      const next = [...prev];
+      const lastUserIndex = [...next].reverse().findIndex((entry) => entry.role === 'user');
+      if (lastUserIndex >= 0) {
+        const index = next.length - 1 - lastUserIndex;
+        next[index] = { ...next[index], content: improvedPrompt };
+      }
+      return next;
+    });
+  };
+
+  const onUseOriginalPrompt = () => {
+    if (!promptQuality) return;
+    setLastPrompt(promptQuality.originalPrompt || lastPrompt);
+    setPromptQuality(null);
   };
 
   const startEditMessage = (message) => {
@@ -962,6 +1092,7 @@ function App() {
     setStatus('idle');
     setTradeoffOpen(false);
     setClassification(null);
+    setPromptQuality(null);
     setInput('');
     setMessages((prev) => [
       ...prev,
@@ -1808,7 +1939,14 @@ function App() {
           classification={classification}
           tradeoffOpen={tradeoffOpen}
           educationExpanded={educationExpanded}
+          promptQuality={promptQuality}
           onToggleEducationExpanded={() => setEducationExpanded((prev) => !prev)}
+          onToggleQualityItem={onToggleQualityItem}
+          onQualityPromptChange={(value) =>
+            setPromptQuality((prev) => (prev ? { ...prev, editedPrompt: value } : prev))
+          }
+          onUseImprovedPrompt={onUseImprovedPrompt}
+          onUseOriginalPrompt={onUseOriginalPrompt}
           onChooseAction={() => {
             setTradeoffOpen(true);
           }}

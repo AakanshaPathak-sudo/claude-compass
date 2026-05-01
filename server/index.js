@@ -24,6 +24,7 @@ const groq = new Groq({
 const MODEL = 'llama-3.3-70b-versatile';
 
 const CLASSIFIER_SYSTEM_PROMPT = `You are an intent classifier. Analyse the user's prompt and return JSON only with these fields: recommendation (one of: workflow, simple_prompt, agent, skill), reason (one sentence explaining why), steps (array of 3-6 step names if workflow, else empty), tokens_min (integer), tokens_max (integer), time_estimate (string like '3-6 min' or '~15 sec'), quality (string), repeatable (boolean). Return only valid JSON, no other text.`;
+const QUALITY_SYSTEM_PROMPT = `You are a prompt quality checker. Evaluate if this prompt is specific enough to produce a high quality structured output. Return JSON only: {isVague: boolean, missingInfo: string[]} where missingInfo is a list of 2-3 specific things that would make the prompt better. Example missing info: 'time period', 'specific states to focus on', 'type of data needed', 'format of output'.`;
 
 const writeSSE = (res, payload) => {
   res.write(`data: ${JSON.stringify(payload)}\n\n`);
@@ -110,6 +111,46 @@ app.post('/api/classify', async (req, res) => {
     return res.json({ classification });
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Classification request failed' });
+  }
+});
+
+app.post('/api/prompt-quality', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    const completion = await groq.chat.completions.create({
+      model: MODEL,
+      max_tokens: 250,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: QUALITY_SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+    });
+
+    const text = completion.choices?.[0]?.message?.content ?? '';
+    let quality;
+    try {
+      quality = JSON.parse(text);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/);
+      quality = match ? JSON.parse(match[0]) : {};
+    }
+
+    return res.json({
+      quality: {
+        isVague: Boolean(quality?.isVague),
+        missingInfo: Array.isArray(quality?.missingInfo)
+          ? quality.missingInfo.filter((item) => typeof item === 'string').slice(0, 3)
+          : [],
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Prompt quality check failed' });
   }
 });
 
