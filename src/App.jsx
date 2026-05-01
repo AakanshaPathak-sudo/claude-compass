@@ -20,8 +20,6 @@ const TRADEOFF_METRICS = {
   },
 };
 
-const FINAL_WORKFLOW_SUMMARY_SYSTEM_PROMPT =
-  'You are a helpful assistant. Write a clean, concise response using proper markdown. Use proper markdown syntax: ## for headers, - for bullet points, and **text** for bold. Never use spaces or indentation to create structure. Do not output plain line-by-line text blocks. Keep paragraphs short (2-3 sentences max) and avoid excessive blank lines.';
 const WORKFLOWS_STORAGE_KEY = 'compass_workflows';
 const PINNED_STORAGE_KEY = 'compass_pinned';
 const MESSAGE_FEEDBACK_KEY = 'compass_message_feedback';
@@ -1058,7 +1056,7 @@ function App() {
     let currentStepIndex = 0;
     let clearWorkflowTimeout = () => {};
 
-    const persistWorkflowSummary = async () => {
+    const persistWorkflowSummary = (finalSummaryText) => {
       const orderedSteps = activeSteps
         .map((step) => ({
           step,
@@ -1079,17 +1077,7 @@ function App() {
         [toggleId]: false,
       }));
 
-      const synthesisPrompt = `User request:\n${activePrompt}\n\nWorkflow step outputs:\n${orderedSteps
-        .map(({ step, content }) => `- ${step}: ${content}`)
-        .join('\n')}\n\nNow provide a final polished response for the user.\n\nOutput format (required):\n## Summary\n- bullet point\n- bullet point\n\n## Key details\n- bullet point\n- bullet point\n\nUse markdown bullet points for all state/city data lines.`;
-
-      const finalSummary = await runSimplePrompt(synthesisPrompt, [
-        ...sourceHistory,
-        {
-          role: 'assistant',
-          content: orderedSteps.map(({ step, content }) => `### ${step}\n\n${content}`).join('\n\n'),
-        },
-      ], FINAL_WORKFLOW_SUMMARY_SYSTEM_PROMPT);
+      const finalSummary = enforceMarkdownBullets(finalSummaryText || '').trim();
 
       const workflowEntry = {
         id: workflowId,
@@ -1101,10 +1089,19 @@ function App() {
       };
       setMessages((prev) => [
         ...prev,
+        ...(finalSummary
+          ? [{ role: 'assistant', content: finalSummary, id: crypto.randomUUID() }]
+          : []),
         { type: 'workflow_meta', content: '✓ Workflow complete', id: crypto.randomUUID() },
         { type: 'workflow_name_prompt', id: namingMessageId, workflowId },
         { type: 'workflow_toggle', id: toggleId, steps: orderedSteps },
       ]);
+      if (finalSummary) {
+        setConversationHistory((prev) => [
+          ...prev,
+          { role: 'assistant', content: finalSummary },
+        ]);
+      }
       setPendingWorkflowSave({
         messageId: namingMessageId,
         workflow: workflowEntry,
@@ -1125,6 +1122,7 @@ function App() {
         throw new Error('Workflow stream failed');
       }
 
+      let finalSummaryFromWorkflow = '';
       await parseEventStream(response, (event) => {
         if (event.type === 'step_start') {
           currentStepIndex += 1;
@@ -1140,6 +1138,10 @@ function App() {
           outputByStep[event.step] = `${outputByStep[event.step] || ''}${event.chunk}`;
         }
 
+        if (event.type === 'summary') {
+          finalSummaryFromWorkflow = typeof event.summary === 'string' ? event.summary : '';
+        }
+
         if (event.type === 'done') {
           workflowCompleted = true;
           setWorkflowProgress(null);
@@ -1151,7 +1153,7 @@ function App() {
       }
 
       clearTimeoutRef();
-      await persistWorkflowSummary();
+      persistWorkflowSummary(finalSummaryFromWorkflow);
       setWorkflowRunning(false);
     } catch (error) {
       clearWorkflowTimeout();
@@ -1174,7 +1176,7 @@ function App() {
     const streamId = crypto.randomUUID();
     const historyForRequest = normalizeHistory(sourceHistory);
     let streamedText = '';
-    const shouldEnforceMarkdown = systemOverride === FINAL_WORKFLOW_SUMMARY_SYSTEM_PROMPT;
+    const shouldEnforceMarkdown = false;
     const appendToken = async (token) => {
       if (!token) return;
       streamedText += token;

@@ -30,16 +30,12 @@ export default async function handler(req, res) {
   try {
     const groq = getGroqClient();
     const conversationMessages = buildConversationMessages({ prompt, history });
-    const workflowPrompt = [
-      `Topic: ${prompt}`,
-      '',
-      'Execute these workflow steps in order and return JSON only:',
-      ...steps.map((step, index) => `${index + 1}. ${step}`),
-      '',
-      'Return strictly valid JSON in this shape:',
-      '{ "steps": [ { "name": "step name", "output": "concise result" } ] }',
-      'Keep each output concise but useful. Do not include markdown fences or extra text.',
-    ].join('\n');
+    const stepsList = steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
+    const workflowPrompt =
+      `You are executing a multi-step workflow. The user's request is: ${prompt}. ` +
+      `Execute these steps:\n${stepsList}\n` +
+      'For each step provide a 2-3 sentence output. Then provide a comprehensive final summary. ' +
+      'Format your response as JSON with keys: steps (array of {name, output}) and summary (string).';
 
     const completion = await groq.chat.completions.create({
       model: MODEL,
@@ -49,7 +45,7 @@ export default async function handler(req, res) {
         {
           role: 'system',
           content:
-            'You execute a multi-step workflow in a single pass. Return only valid JSON with one concise output per provided step.',
+            'Return valid JSON only. Do not include markdown fences or extra text outside JSON.',
         },
         ...conversationMessages,
         { role: 'user', content: workflowPrompt },
@@ -66,6 +62,7 @@ export default async function handler(req, res) {
     }
 
     const parsedSteps = Array.isArray(parsed?.steps) ? parsed.steps : [];
+    const summary = typeof parsed?.summary === 'string' ? parsed.summary.trim() : '';
 
     for (let index = 0; index < steps.length; index += 1) {
       const stepName = steps[index];
@@ -79,6 +76,7 @@ export default async function handler(req, res) {
       writeSSE(res, { type: 'step_end', step: stepName });
     }
 
+    writeSSE(res, { type: 'summary', summary });
     writeSSE(res, { type: 'done' });
     return res.end();
   } catch (error) {
