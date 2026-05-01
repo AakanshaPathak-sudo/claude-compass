@@ -26,7 +26,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const body = parseBody(req);
+    const body = await parseBody(req);
     const { prompt, history } = body;
 
     if (!prompt || typeof prompt !== 'string') {

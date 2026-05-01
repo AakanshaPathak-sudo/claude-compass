@@ -14,16 +14,38 @@ export const getGroqClient = () => {
   return new Groq({ apiKey });
 };
 
-export const parseBody = (req) => {
-  if (!req?.body) return {};
-  if (typeof req.body === 'string') {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
+export const parseBody = async (req) => {
+  if (req?.body) {
+    if (typeof req.body === 'string') {
+      try {
+        return JSON.parse(req.body);
+      } catch {
+        return {};
+      }
     }
+    return req.body;
   }
-  return req.body;
+
+  if (!req || typeof req.on !== 'function') {
+    return {};
+  }
+
+  const raw = await new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+    });
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
 };
 
 export const parseClassifierJSON = (rawText) => {
@@ -64,6 +86,7 @@ export const initSSE = (res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
 };
 
 export const writeSSE = (res, payload) => {

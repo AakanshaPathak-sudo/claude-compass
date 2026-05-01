@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const body = parseBody(req);
+  const body = await parseBody(req);
   const { prompt, steps, history } = body;
 
   if (!prompt || !Array.isArray(steps)) {
