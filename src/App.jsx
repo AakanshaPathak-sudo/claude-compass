@@ -23,6 +23,7 @@ const TRADEOFF_METRICS = {
 const WORKFLOWS_STORAGE_KEY = 'compass_workflows';
 const PINNED_STORAGE_KEY = 'compass_pinned';
 const MESSAGE_FEEDBACK_KEY = 'compass_message_feedback';
+const COMPASS_DISABLED_KEY = 'compass_disabled';
 const buildImprovedWorkflowPrompt = (basePrompt, selectedItems) => {
   const cleanedBase = (basePrompt || '').replace(/\s+/g, ' ').trim();
   const details = Array.isArray(selectedItems) ? selectedItems.filter(Boolean) : [];
@@ -343,6 +344,7 @@ function CompassPanel({
   onQualityPromptChange,
   onUseImprovedPrompt,
   onUseOriginalPrompt,
+  onDisableCompassForever,
 }) {
   const visible = status !== 'idle';
   const primaryIsWorkflow = classification?.recommendation !== 'simple_prompt';
@@ -358,12 +360,17 @@ function CompassPanel({
       }`}
     >
       <div className="border-b border-[#c96442]/20 bg-[#fdf0eb] px-5 py-3">
-        <div className="flex items-center gap-2">
-          <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#c96442]" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M15.6 8.4l-2.2 6.2-6.2 2.2 2.2-6.2 6.2-2.2z" fill="currentColor" stroke="none" />
-          </svg>
-          <p className="text-sm font-semibold text-[#1a1917]">Claude</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 text-[#c96442]" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M15.6 8.4l-2.2 6.2-6.2 2.2 2.2-6.2 6.2-2.2z" fill="currentColor" stroke="none" />
+            </svg>
+            <p className="text-sm font-semibold text-[#1a1917]">Claude Compass</p>
+          </div>
+          <span className="rounded-full border border-[#c96442]/25 bg-white px-2 py-0.5 text-[11px] font-semibold text-[#c96442] md:px-3 md:py-1">
+            Intent-aware routing
+          </span>
         </div>
       </div>
 
@@ -558,6 +565,16 @@ function CompassPanel({
                 </div>
               </div>
             </div>
+
+            <div className="flex justify-center border-t border-[#e8e6df] pt-3">
+              <button
+                type="button"
+                onClick={onDisableCompassForever}
+                className="text-[12px] text-[#9a968d] no-underline hover:underline"
+              >
+                Don&apos;t show this again
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -596,8 +613,22 @@ function App() {
   const [editDraft, setEditDraft] = useState('');
   const [feedbackByMessageId, setFeedbackByMessageId] = useState({});
   const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [compassDisabled, setCompassDisabled] = useState(() => {
+    try {
+      return localStorage.getItem(COMPASS_DISABLED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [toastMessage, setToastMessage] = useState(null);
   const inputRef = useRef(null);
   const chatContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (!toastMessage) return undefined;
+    const id = setTimeout(() => setToastMessage(null), 5000);
+    return () => clearTimeout(id);
+  }, [toastMessage]);
 
   const canSend = input.trim().length > 0 && status !== 'classifying' && !workflowRunning && !simpleState.running;
   const isApiLoading = status === 'classifying' || workflowRunning || simpleState.running;
@@ -867,6 +898,9 @@ function App() {
       setConversationHistory(nextHistory);
     }
 
+    const compassSkipped =
+      typeof localStorage !== 'undefined' && localStorage.getItem(COMPASS_DISABLED_KEY) === 'true';
+
     setInlineError(null);
     setActiveView('chat');
     setInput('');
@@ -879,6 +913,13 @@ function App() {
     setWorkflowProgress(null);
     setSimpleState({ running: false });
     setInlineError(null);
+
+    if (compassSkipped) {
+      setStatus('idle');
+      await runSimplePrompt(prompt, nextHistory);
+      return;
+    }
+
     setStatus('classifying');
     let clearClassifyTimeout = () => {};
 
@@ -1112,6 +1153,31 @@ function App() {
     requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
+  };
+
+  const onDisableCompassForever = () => {
+    try {
+      localStorage.setItem(COMPASS_DISABLED_KEY, 'true');
+    } catch {
+      // ignore
+    }
+    setCompassDisabled(true);
+    setStatus('idle');
+    setTradeoffOpen(false);
+    setClassification(null);
+    setPromptQuality(null);
+    setEducationExpanded(false);
+    setToastMessage("Got it — I'll send all responses directly from now on.");
+  };
+
+  const onReenableCompass = () => {
+    try {
+      localStorage.setItem(COMPASS_DISABLED_KEY, 'false');
+    } catch {
+      // ignore
+    }
+    setCompassDisabled(false);
+    setToastMessage('Workflow suggestions re-enabled.');
   };
 
   const parseEventStream = async (response, onEvent) => {
@@ -1545,9 +1611,17 @@ function App() {
           </button>
           <h1 className="text-lg font-semibold text-[#1a1917] md:text-xl">Claude</h1>
         </div>
-        <span className="hide-badge-xs rounded-full border border-[#c96442]/25 bg-[#fdf0eb] px-2 py-0.5 text-[11px] font-semibold text-[#c96442] md:px-3 md:py-1">
-          Intent-aware routing
-        </span>
+        {compassDisabled && (
+          <button
+            type="button"
+            onClick={onReenableCompass}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-lg leading-none text-[#6b6860] hover:bg-[#ece9e1]"
+            title="Re-enable workflow suggestions"
+            aria-label="Re-enable workflow suggestions"
+          >
+            ⚙
+          </button>
+        )}
       </header>
 
       <div className="h-[calc(100vh-60px)] min-h-0 flex flex-col">
@@ -1955,6 +2029,7 @@ function App() {
           }}
           onDismiss={onDismissPanel}
           onConfirm={onConfirm}
+          onDisableCompassForever={onDisableCompassForever}
         />
         {workflowRunning && workflowProgress && (
           <div className="mr-auto flex w-full max-w-[760px] items-center gap-2 rounded-xl border border-[#e2e0d8] bg-[#ffffff] p-3 text-sm text-[#6b6860]">
@@ -2018,6 +2093,14 @@ function App() {
       )}
       </div>
       </main>
+      {toastMessage && (
+        <div
+          role="status"
+          className="pointer-events-none fixed bottom-28 left-1/2 z-[60] max-w-[min(92vw,28rem)] -translate-x-1/2 rounded-lg border border-[#e2e0d8] bg-[#ffffff] px-4 py-2.5 text-center text-sm text-[#1a1917] shadow-md md:bottom-32"
+        >
+          {toastMessage}
+        </div>
+      )}
     </>
   );
 }
