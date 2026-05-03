@@ -363,7 +363,7 @@ function CompassPanel({
             <circle cx="12" cy="12" r="9" />
             <path d="M15.6 8.4l-2.2 6.2-6.2 2.2 2.2-6.2 6.2-2.2z" fill="currentColor" stroke="none" />
           </svg>
-          <p className="text-sm font-semibold text-[#1a1917]">Claude Compass</p>
+          <p className="text-sm font-semibold text-[#1a1917]">Claude</p>
         </div>
       </div>
 
@@ -1543,7 +1543,7 @@ function App() {
           >
             ≡
           </button>
-          <h1 className="text-lg font-semibold text-[#1a1917] md:text-xl">Claude Compass</h1>
+          <h1 className="text-lg font-semibold text-[#1a1917] md:text-xl">Claude</h1>
         </div>
         <span className="hide-badge-xs rounded-full border border-[#c96442]/25 bg-[#fdf0eb] px-2 py-0.5 text-[11px] font-semibold text-[#c96442] md:px-3 md:py-1">
           Intent-aware routing
